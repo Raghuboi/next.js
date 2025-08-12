@@ -3287,8 +3287,8 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
 
         if export.src.is_none() {
             for spec in export.specifiers.iter() {
-                fn to_string(name: &ModuleExportName) -> &Atom {
-                    name.atom()
+                fn to_rcstr(name: &ModuleExportName) -> RcStr {
+                    name.atom().as_str().into()
                 }
                 match spec {
                     ExportSpecifier::Namespace(_) => {
@@ -3304,8 +3304,8 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
                         );
                     }
                     ExportSpecifier::Named(ExportNamedSpecifier { orig, exported, .. }) => {
-                        let key = to_string(exported.as_ref().unwrap_or(orig)).as_str().into();
-                        let binding_name = to_string(orig).as_str().into();
+                        let key = to_rcstr(exported.as_ref().unwrap_or(orig));
+                        let binding_name = to_rcstr(orig);
                         let export = {
                             let imported_binding = if let ModuleExportName::Ident(ident) = orig {
                                 self.eval_context.imports.get_binding(&ident.to_id())
@@ -3336,8 +3336,8 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
                                     if is_fake_esm {
                                         Liveness::Mutable
                                     } else {
-                                        // If this is `export {foo}` and `foo` is a const then we
-                                        // could export as Const here.
+                                        // If this is `export {foo} from 'mod'` and `foo` is a const
+                                        // in mod then we could export as Const here.
                                         Liveness::Live
                                     },
                                 )
@@ -3361,13 +3361,15 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
     ) {
         {
             let decl: &Decl = &export.decl;
-            let f = &mut |name: RcStr, liveness: Liveness| {
+            let insert_export_binding = &mut |name: RcStr, liveness: Liveness| {
                 self.esm_exports
                     .insert(name.clone(), EsmExport::LocalBinding(name, liveness));
             };
             match decl {
                 Decl::Class(ClassDecl { ident, .. }) | Decl::Fn(FnDecl { ident, .. }) => {
-                    f(ident.sym.as_str().into(), Liveness::Constant);
+                    // TODO: examine whether the value is ever mutated rather than just checking
+                    // 'const'
+                    insert_export_binding(ident.sym.as_str().into(), Liveness::Live);
                 }
                 Decl::Var(var_decl) => {
                     // TODO: examine whether the value is ever mutated rather than just checking
@@ -3379,10 +3381,13 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
                     };
                     let decls = &*var_decl.decls;
                     decls.iter().for_each(|VarDeclarator { name, .. }| {
-                        for_each_ident_in_pat(name, &mut |name| f(name, liveness))
+                        for_each_ident_in_pat(name, &mut |name| {
+                            insert_export_binding(name, liveness)
+                        })
                     });
                 }
                 Decl::Using(_) => {
+                    // See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/export#:~:text=You%20cannot%20use%20export%20on%20a%20using%20or%20await%20using%20declaration
                     unreachable!("using declarations can not be exported");
                 }
                 Decl::TsInterface(_)
