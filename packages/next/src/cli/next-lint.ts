@@ -7,6 +7,7 @@ import loadConfig from '../server/config'
 import { printAndExit } from '../server/lib/utils'
 import { Telemetry } from '../telemetry/storage'
 import { green, yellow, bold } from '../lib/picocolors'
+import * as Log from '../build/output/log'
 import { ESLINT_DEFAULT_DIRS } from '../lib/constants'
 import { runLintCheck } from '../lib/eslint/runLintCheck'
 import { CompileError } from '../lib/compile-error'
@@ -65,16 +66,18 @@ const eslintOptions = (
 
 const nextLint = async (options: NextLintOptions, directory?: string) => {
   // Show deprecation warning
-  console.warn(
-    yellow(bold('⚠️  DEPRECATION WARNING: ')) +
-      yellow('`next lint` will be removed in Next.js 16.\n') +
-      'For new projects, use ' +
-      bold('create-next-app') +
-      ' to choose your preferred linter.\n' +
-      'For existing projects, migrate to explicit ESLint configuration and update your package.json scripts to use ' +
-      bold('"eslint ."') +
-      ' instead.\n'
+  Log.warn(
+    yellow(bold('DEPRECATION WARNING: ')) +
+      yellow('`next lint` will be removed in Next.js 16.')
   )
+  console.log(
+    'For new projects, use ' +
+      bold('create-next-app') +
+      ' to choose your preferred linter.'
+  )
+  console.log('For existing projects, migrate to the ESLint CLI:')
+  console.log(bold('npx @next/codemod@latest next-lint-to-eslint-cli .'))
+  console.log()
 
   const baseDir = getProjectDir(directory)
 
@@ -160,7 +163,7 @@ const nextLint = async (options: NextLintOptions, directory?: string) => {
       if (lintOutput) {
         printAndExit(lintOutput, 0)
       } else if (lintResults && !lintOutput) {
-        printAndExit(green('✔ No ESLint warnings or errors'), 0)
+        printAndExit(green('No ESLint warnings or errors'), 0)
       } else {
         // this makes sure we exit 1 after the error from line 116
         // in packages/next/src/lib/eslint/runLintCheck
